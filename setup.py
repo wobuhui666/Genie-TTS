@@ -26,14 +26,12 @@ class CMakeBuild(build_ext):
         python_executable = sys.executable
 
         # Find onnxruntime paths
-        ort_path, ort_library_path = self._find_onnxruntime_paths()
+        ort_library_path = self._find_onnxruntime_paths()
 
-        import pybind11
         pybind11_cmake_dir = pybind11.get_cmake_dir()
         cmake_args = [
             f'-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}',
             f'-DPYTHON_EXECUTABLE={python_executable}',
-            f'-DORT_PATH={ort_path}',
             f'-DORT_LIBRARY_PATH={ort_library_path}',
             f'-DCMAKE_BUILD_TYPE=Release',
             f'-Dpybind11_DIR={pybind11_cmake_dir}',
@@ -121,22 +119,12 @@ class CMakeBuild(build_ext):
             if not ort_library_path:
                 raise RuntimeError("Could not find onnxruntime library")
 
-            print(f"Found onnxruntime at: {ort_path}")
-            print(f"Found onnxruntime library at: {ort_library_path}")
-
-            return ort_path, ort_library_path
+            return ort_library_path
 
         except ImportError:
             raise RuntimeError("onnxruntime not found. Please install onnxruntime first.")
         except Exception as e:
             raise RuntimeError(f"Error finding onnxruntime: {e}")
-
-
-# Read pyproject.toml for metadata
-def read_requirements():
-    with open("requirements.txt", "r") as f:
-        return [line.strip() for line in f if line.strip() and not line.startswith("#")]
-
 
 setup(
     ext_modules=[CMakeExtension('T2SOnnxCPURuntime', 'runtime')],
