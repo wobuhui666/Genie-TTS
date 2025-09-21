@@ -44,7 +44,7 @@ class CMakeBuild(build_ext):
             cmake_args += [f'-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE={extdir}']
             if sys.maxsize > 2**32:
                 cmake_args += ['-A', 'x64']
-            build_args += ['--', '/m']
+            build_args += ['--config', 'Release', '--', '/m']
         else:
             cmake_args += [f'-DCMAKE_BUILD_TYPE=Release']
             build_args += ['--', '-j4']

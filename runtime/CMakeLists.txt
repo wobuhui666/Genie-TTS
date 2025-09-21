@@ -19,10 +19,13 @@ if(NOT DEFINED ORT_LIBRARY_PATH)
 endif()
 message("ORT_LIBRARY_PATH: ${ORT_LIBRARY_PATH}")
 
-# Extract library name from full path
-get_filename_component(ORT_LIBRARY_NAME ${ORT_LIBRARY_PATH} NAME)
+if(WIN32)
+    target_link_libraries(T2SOnnxCPURuntime PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/win/onnxruntime.lib)
+else()
+    target_link_libraries(T2SOnnxCPURuntime PRIVATE ${ORT_LIBRARY_PATH})
+endif()
 
-target_link_libraries(T2SOnnxCPURuntime PRIVATE ${ORT_LIBRARY_PATH})
 set_target_properties(T2SOnnxCPURuntime PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
 )
