@@ -9,7 +9,7 @@
 
 namespace py = pybind11;
 constexpr int PREFILL_THREAD_NUM = 0; // 0 means using default thread number
-constexpr int STEP_DECODE_THREAD_NUM = 1;
+constexpr int STEP_DECODE_THREAD_NUM = 0; // 1 is usually enough for step decode
 constexpr int HEAD_NUM = 24;
 constexpr int KV_CACHE_PREPARED_LENGTH = 512;
 #define CPP_PRINT(msg) py::print("[C++] " + std::string(msg))
@@ -240,11 +240,12 @@ public:
         }
         int y_num = y_.GetTensorTypeAndShapeInfo().GetElementCount();
         int64_t* y_data = y_.GetTensorMutableData<int64_t>();
+        y_data[y_num - 1] = (int64_t)0; // Set the last token to be 0
         // Getting y[-i-1:-1]
         int64_t* semantics_start = y_data + (y_num - (i + 1));
-        auto semantics_array = py::array_t<int64_t>({1, 1, i - 1});
+        auto semantics_array = py::array_t<int64_t>({1, 1, i});
         py::buffer_info buf = semantics_array.request();
-        std::memcpy(buf.ptr, semantics_start, sizeof(int64_t) * (i - 1));
+        std::memcpy(buf.ptr, semantics_start, sizeof(int64_t) * i);
         return semantics_array;
     }
 private:
