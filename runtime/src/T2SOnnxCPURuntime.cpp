@@ -15,6 +15,15 @@ constexpr int KV_CACHE_PREPARED_LENGTH = 512;
 #define CPP_PRINT(msg) py::print("[C++] " + std::string(msg))
 using OrtValueShapeType = std::vector<int64_t>;
 
+#ifdef _WIN32
+#include <locale>
+#include <codecvt>
+inline std::wstring to_wstring(const std::string& str) {
+    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+    return converter.from_bytes(str);
+}
+#endif
+
 template <typename MajorType, typename KVType=MajorType>
 class T2SOnnxCPURuntime {
 public:
@@ -36,15 +45,27 @@ public:
 
         session_options.SetIntraOpNumThreads(PREFILL_THREAD_NUM);
         session_options.SetInterOpNumThreads(PREFILL_THREAD_NUM);
+#ifdef _WIN32
+        std::wstring t2s_encoder_wpath = to_wstring(t2s_encoder_path);
+        std::wstring t2s_first_stage_decoder_wpath = to_wstring(t2s_first_stage_decoder_path);
+        t2s_encoder_session_.reset(new Ort::Session(env, t2s_encoder_wpath.data(), session_options));
+        t2s_first_stage_decoder_session_.reset(new Ort::Session(env, t2s_first_stage_decoder_wpath.data(), session_options));
+#else
         t2s_encoder_session_.reset(new Ort::Session(env, t2s_encoder_path.data(), session_options));
         t2s_first_stage_decoder_session_.reset(new Ort::Session(env, t2s_first_stage_decoder_path.data(), session_options));
+#endif
         for(const auto& name : t2s_first_stage_decoder_session_->GetOutputNames()) {
             t2s_first_stage_decoder_output_names_.push_back(name);
         }
 
         session_options.SetIntraOpNumThreads(STEP_DECODE_THREAD_NUM);
         session_options.SetInterOpNumThreads(STEP_DECODE_THREAD_NUM);
+#ifdef _WIN32
+        std::wstring t2s_stage_decoder_wpath = to_wstring(t2s_stage_decoder_path);
+        t2s_stage_decoder_session_.reset(new Ort::Session(env, t2s_stage_decoder_wpath.data(), session_options));
+#else
         t2s_stage_decoder_session_.reset(new Ort::Session(env, t2s_stage_decoder_path.data(), session_options));
+#endif
         for(const auto& name : t2s_stage_decoder_session_->GetInputNames()) {
             t2s_stage_decoder_input_names_.push_back(name);
         }
