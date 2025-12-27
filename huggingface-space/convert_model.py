@@ -2,15 +2,42 @@
 """
 Model Conversion Script
 =======================
-This script downloads and converts PyTorch models to ONNX format.
+This script downloads GenieData resources and converts PyTorch models to ONNX format.
 """
 
 import os
 import sys
 
-def main():
-    print("Starting ONNX conversion...")
+def download_genie_data():
+    """Download GenieData resources from HuggingFace"""
+    from huggingface_hub import snapshot_download
     
+    genie_data_dir = os.environ.get("GENIE_DATA_DIR", "./GenieData")
+    
+    if os.path.exists(genie_data_dir) and os.listdir(genie_data_dir):
+        print(f"GenieData already exists at {genie_data_dir}")
+        return
+    
+    print("🚀 Starting download Genie-TTS resources from HuggingFace...")
+    snapshot_download(
+        repo_id="High-Logic/Genie",
+        repo_type="model",
+        allow_patterns="GenieData/*",
+        local_dir=".",
+        local_dir_use_symlinks=False,  # Don't use symlinks in Docker
+    )
+    print("✅ Genie-TTS resources downloaded successfully.")
+
+def main():
+    # Set environment variable for GenieData location BEFORE importing genie_tts
+    os.environ["GENIE_DATA_DIR"] = "/app/GenieData"
+    
+    # Step 1: Download GenieData resources
+    print("Step 1: Downloading GenieData resources...")
+    download_genie_data()
+    
+    # Step 2: Now import genie_tts (it will check for GenieData)
+    print("Step 2: Starting ONNX conversion...")
     import genie_tts as genie
     
     ckpt_path = os.environ.get("CKPT_PATH", "/app/temp/model.ckpt")

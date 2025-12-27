@@ -14,7 +14,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     DEBIAN_FRONTEND=noninteractive \
     MODELS_DIR=/app/models \
-    GENIE_DATA_DIR=/app/genie_data
+    GENIE_DATA_DIR=/app/GenieData
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -45,7 +45,7 @@ RUN pip install --no-cache-dir genie-tts
 # Create directories
 RUN mkdir -p /app/models/liang/onnx \
     && mkdir -p /app/models/liang/reference \
-    && mkdir -p /app/genie_data \
+    && mkdir -p /app/GenieData \
     && mkdir -p /app/temp
 
 # Download model files
@@ -77,9 +77,6 @@ COPY models/liang/config.json /app/models/liang/config.json
 
 # Copy application code
 COPY app.py .
-
-# Download Genie base data (uses a script to avoid inline Python issues)
-RUN python -c 'import genie_tts; genie_tts.download_genie_data()'
 
 # Expose port (Hugging Face Spaces uses 7860)
 EXPOSE 7860
