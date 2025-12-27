@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  tts-accelerator:
+    build: .
+    container_name: tts-accelerator
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      # 必需配置
+      - NEWAPI_BASE_URL=${NEWAPI_BASE_URL}
+      - NEWAPI_API_KEY=${NEWAPI_API_KEY}
+      - TTS_ENDPOINTS=${TTS_ENDPOINTS}
+      # 可选配置
+      - TTS_DEFAULT_MODEL=${TTS_DEFAULT_MODEL:-liang}
+      - TTS_MAX_CONCURRENT_PER_ENDPOINT=${TTS_MAX_CONCURRENT_PER_ENDPOINT:-3}
+      - TTS_REQUEST_TIMEOUT=${TTS_REQUEST_TIMEOUT:-60}
+      - CACHE_MAX_SIZE=${CACHE_MAX_SIZE:-1000}
+      - CACHE_TTL=${CACHE_TTL:-3600}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
