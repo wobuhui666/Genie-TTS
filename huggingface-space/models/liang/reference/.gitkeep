@@ -1,0 +1,2 @@
+# This directory will contain the reference audio file
+# The file will be downloaded during Docker build

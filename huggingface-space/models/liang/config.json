@@ -1,0 +1,5 @@
+{
+    "reference_audio": "reference/audio.wav",
+    "reference_text": "这是一条参考音频，将此音频拖入参考内，再添加文本，即可合成音色",
+    "language": "Chinese"
+}

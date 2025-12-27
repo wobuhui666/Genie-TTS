@@ -11,6 +11,18 @@
 - 仅需要 `text` 和 `model` 参数
 - 返回 WAV 格式音频
 - 使用 Docker 部署
+- **模型在构建时从云端下载并转换为 ONNX**
+
+### 具体配置
+
+| 配置项 | 值 |
+|--------|-----|
+| 模型名称 | `liang` |
+| 语言 | Chinese |
+| .ckpt 文件 | https://22333misaka-openlist.hf.space/d/od/shantianliang_proplus_e32.ckpt |
+| .pth 文件 | https://22333misaka-openlist.hf.space/d/od/shantianliang_proplus_e8_s192.pth |
+| 参考音频 | https://22333misaka-openlist.hf.space/d/od/ref_shantianliang_1.wav |
+| 参考音频文本 | 这是一条参考音频，将此音频拖入参考内，再添加文本，即可合成音色 |
 
 ---
 
