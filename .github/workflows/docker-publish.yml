@@ -3,9 +3,10 @@ name: Build and Publish TTS Accelerator
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'tts-accelerator/**'
+      - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
 
 env:
