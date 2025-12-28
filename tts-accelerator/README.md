@@ -10,6 +10,7 @@
 - ✅ **多 Space 负载均衡** - 支持多个 HuggingFace Space 并行处理
 - ✅ **智能缓存** - 使用内存缓存，支持 LRU + TTL 淘汰策略
 - ✅ **按句分段** - 智能按句子分段，确保 TTS 质量
+- ✅ **API 鉴权** - 支持 Bearer Token 验证，保护 API 端点
 
 ## 架构图
 
@@ -76,6 +77,24 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ## API 接口
 
+### API 鉴权
+
+`/v1/chat/completions` 和 `/v1/audio/speech` 端点需要 API 鉴权。请在请求头中包含 `Authorization` 头，使用与 `NEWAPI_API_KEY` 相同的值：
+
+```bash
+Authorization: Bearer sk-xxxx
+```
+
+其中 `sk-xxxx` 是您在 `.env` 文件中配置的 `NEWAPI_API_KEY` 值。
+
+**无需鉴权的端点**：
+- `/` - 服务信息
+- `/health` - 健康检查
+- `/cache/stats` - 缓存统计
+- `/cache/clear` - 清空缓存
+- `/v1/models` - 列出模型
+- `/v1/audio/models` - 列出 TTS 模型
+
 ### Chat Completion（反向代理）
 
 与 OpenAI Chat Completion API 完全兼容：
@@ -83,6 +102,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```bash
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-xxxx" \
   -d '{
     "model": "gpt-4",
     "messages": [{"role": "user", "content": "你好"}],
@@ -104,6 +124,7 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 ```bash
 curl -X POST http://localhost:8000/v1/audio/speech \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-xxxx" \
   -d '{
     "model": "liang",
     "input": "要合成的文本"

@@ -3,11 +3,12 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response, JSONResponse
 
 from ..config import get_settings
 from ..models.schemas import SpeechRequest
+from ..dependencies import verify_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ def get_tts_balancer():
 
 
 @router.post("/audio/speech")
-async def create_speech(request: SpeechRequest):
+async def create_speech(request: SpeechRequest, _: str = Depends(verify_api_key)):
     """
     TTS 语音合成接口 - OpenAI 兼容
     

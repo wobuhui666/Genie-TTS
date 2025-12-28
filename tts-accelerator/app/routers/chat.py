@@ -5,13 +5,14 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from ..config import get_settings
 from ..models.schemas import ChatCompletionRequest
 from ..services.text_splitter import StreamingTextSplitter
 from ..services.proxy_client import extract_content_from_sse
+from ..dependencies import verify_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def get_tts_cache():
 
 
 @router.post("/chat/completions")
-async def chat_completions(request: Request):
+async def chat_completions(request: Request, _: str = Depends(verify_api_key)):
     """
     Chat Completion 接口 - OpenAI 兼容的反向代理
     
