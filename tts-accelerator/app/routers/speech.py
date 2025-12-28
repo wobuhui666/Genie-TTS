@@ -32,10 +32,11 @@ async def create_speech(request: SpeechRequest):
     TTS 语音合成接口 - OpenAI 兼容
     
     功能：
-    1. 查询缓存中是否有预生成的 TTS
-    2. 如果有，直接返回
-    3. 如果正在生成，等待完成
-    4. 如果没有，现场生成
+    1. 查询缓存中是否有预生成的 TTS（包括分段拼接）
+    2. 如果有分段映射，自动拼接多个分段音频
+    3. 如果有直接缓存，直接返回
+    4. 如果正在生成，等待完成
+    5. 如果没有，现场生成
     """
     settings = get_settings()
     tts_cache = get_tts_cache()

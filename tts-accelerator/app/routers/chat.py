@@ -40,6 +40,7 @@ async def chat_completions(request: Request):
     2. 流式接收响应
     3. 同时分段预生成 TTS
     4. 返回原始响应给客户端
+    5. 注册完整文本与分段的映射关系
     """
     settings = get_settings()
     proxy_client = get_proxy_client()
@@ -95,6 +96,7 @@ async def _handle_non_stream_request(
     )
     
     full_content = ""
+    all_segments = []  # 收集所有分段
     full_response = None
     
     try:
@@ -134,8 +136,9 @@ async def _handle_non_stream_request(
                         sentences = splitter.feed(content)
                         for sentence in sentences:
                             if sentence.strip():
+                                all_segments.append(sentence.strip())
                                 asyncio.create_task(
-                                    tts_cache.submit(sentence, tts_model)
+                                    tts_cache.submit(sentence.strip(), tts_model)
                                 )
                 
                 # 检查是否结束
@@ -150,7 +153,18 @@ async def _handle_non_stream_request(
         if tts_enabled and tts_cache:
             remaining = splitter.flush()
             if remaining and remaining.strip():
-                asyncio.create_task(tts_cache.submit(remaining, tts_model))
+                all_segments.append(remaining.strip())
+                asyncio.create_task(tts_cache.submit(remaining.strip(), tts_model))
+        
+        # 注册完整文本与分段的映射关系
+        if tts_enabled and tts_cache and full_content.strip() and all_segments:
+            asyncio.create_task(
+                tts_cache.submit_with_segments(
+                    full_content.strip(),
+                    all_segments,
+                    tts_model
+                )
+            )
         
         # 更新完整内容
         if full_response:
@@ -179,12 +193,16 @@ async def _stream_response(
     
     1. 转发源站的流式响应
     2. 同时分段预生成 TTS
+    3. 注册完整文本与分段的映射关系
     """
     # 创建文本分段器
     splitter = StreamingTextSplitter(
         max_len=settings.splitter_max_len,
         min_len=settings.splitter_min_len,
     )
+    
+    full_content = ""  # 收集完整文本
+    all_segments = []  # 收集所有分段
     
     try:
         async for line in proxy_client.stream_chat(body):
@@ -195,20 +213,38 @@ async def _stream_response(
             if tts_enabled and tts_cache:
                 content = extract_content_from_sse(line)
                 if content:
+                    full_content += content  # 累积完整文本
+                    
                     # 分段检测
                     sentences = splitter.feed(content)
                     for sentence in sentences:
                         if sentence.strip():
+                            all_segments.append(sentence.strip())
                             # 异步提交 TTS 生成，不阻塞流式返回
                             asyncio.create_task(
-                                tts_cache.submit(sentence, tts_model)
+                                tts_cache.submit(sentence.strip(), tts_model)
                             )
         
         # 处理剩余文本
         if tts_enabled and tts_cache:
             remaining = splitter.flush()
             if remaining and remaining.strip():
-                asyncio.create_task(tts_cache.submit(remaining, tts_model))
+                all_segments.append(remaining.strip())
+                asyncio.create_task(tts_cache.submit(remaining.strip(), tts_model))
+            
+            # 注册完整文本与分段的映射关系
+            if full_content.strip() and all_segments:
+                asyncio.create_task(
+                    tts_cache.submit_with_segments(
+                        full_content.strip(),
+                        all_segments,
+                        tts_model
+                    )
+                )
+                logger.debug(
+                    f"Registered segment mapping for streaming response: "
+                    f"full_len={len(full_content)}, segments={len(all_segments)}"
+                )
                 
     except Exception as e:
         logger.error(f"Stream error: {e}", exc_info=True)

@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from .tts_balancer import TTSLoadBalancer
+from .audio_utils import concatenate_wav
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,14 @@ class TTSCacheEntry:
         return None
 
 
+@dataclass
+class SegmentMapping:
+    """分段映射信息"""
+    full_text: str                    # 完整文本（用于日志和调试）
+    segment_keys: List[str]           # 分段的缓存 key 列表
+    created_at: float = field(default_factory=time.time)
+
+
 class TTSCacheManager:
     """
     TTS 缓存管理器
@@ -51,6 +60,7 @@ class TTSCacheManager:
     - 异步等待正在生成的 TTS
     - LRU + TTL 缓存淘汰
     - 缓存统计
+    - 完整文本 → 分段映射，支持音频拼接
     """
     
     def __init__(
@@ -77,9 +87,14 @@ class TTSCacheManager:
         self._cache: Dict[str, TTSCacheEntry] = {}
         self._lock = asyncio.Lock()
         
+        # 分段映射：完整文本的 cache_key → SegmentMapping
+        self._segment_map: Dict[str, SegmentMapping] = {}
+        self._segment_map_lock = asyncio.Lock()
+        
         # 统计信息
         self.hit_count = 0
         self.miss_count = 0
+        self.concat_hit_count = 0  # 拼接命中次数
         
         # 清理任务
         self._cleanup_task: Optional[asyncio.Task] = None
@@ -137,6 +152,20 @@ class TTSCacheManager:
             
             if expired_keys:
                 logger.info(f"Cleaned up {len(expired_keys)} expired cache entries")
+        
+        # 清理过期的分段映射
+        async with self._segment_map_lock:
+            now = time.time()
+            expired_mappings = [
+                key for key, mapping in self._segment_map.items()
+                if now - mapping.created_at > self.ttl
+            ]
+            
+            for key in expired_mappings:
+                del self._segment_map[key]
+            
+            if expired_mappings:
+                logger.info(f"Cleaned up {len(expired_mappings)} expired segment mappings")
     
     async def _evict_if_needed(self):
         """如果缓存满了，淘汰最旧的条目"""
@@ -181,6 +210,47 @@ class TTSCacheManager:
         
         logger.debug(f"Submitted TTS generation: {cache_key[:16]}..., text_len={len(text)}")
         return cache_key
+    
+    async def submit_with_segments(
+        self,
+        full_text: str,
+        segments: List[str],
+        model: str,
+    ) -> str:
+        """
+        提交完整文本及其分段到生成队列，并记录映射关系。
+        
+        :param full_text: 完整文本
+        :param segments: 分段列表
+        :param model: TTS 模型名称
+        :return: 完整文本的缓存 key
+        """
+        full_key = self._generate_cache_key(full_text, model)
+        
+        # 提交每个分段（如果还没提交的话）
+        segment_keys = []
+        for seg in segments:
+            if seg and seg.strip():
+                seg_key = await self.submit(seg.strip(), model)
+                segment_keys.append(seg_key)
+        
+        if not segment_keys:
+            logger.warning(f"No valid segments for full text: {full_key[:16]}...")
+            return full_key
+        
+        # 记录映射关系
+        async with self._segment_map_lock:
+            self._segment_map[full_key] = SegmentMapping(
+                full_text=full_text[:100] + ("..." if len(full_text) > 100 else ""),
+                segment_keys=segment_keys,
+            )
+        
+        logger.info(
+            f"Registered segment mapping: {full_key[:16]}... → "
+            f"{len(segment_keys)} segments"
+        )
+        
+        return full_key
     
     async def _generate(self, cache_key: str):
         """
@@ -239,6 +309,24 @@ class TTSCacheManager:
         """
         cache_key = self._generate_cache_key(text, model)
         
+        # 首先检查是否有分段映射
+        async with self._segment_map_lock:
+            segment_mapping = self._segment_map.get(cache_key)
+        
+        if segment_mapping:
+            # 有分段映射，尝试拼接
+            logger.info(
+                f"Found segment mapping for {cache_key[:16]}..., "
+                f"concatenating {len(segment_mapping.segment_keys)} segments"
+            )
+            result = await self._get_concatenated(segment_mapping.segment_keys, timeout)
+            if result:
+                self.concat_hit_count += 1
+                return result
+            # 拼接失败，继续尝试其他方式
+            logger.warning(f"Segment concatenation failed for {cache_key[:16]}...")
+        
+        # 检查直接缓存
         async with self._lock:
             entry = self._cache.get(cache_key)
         
@@ -282,6 +370,46 @@ class TTSCacheManager:
             logger.warning(f"Timeout waiting for TTS generation: {cache_key[:16]}...")
             return None
     
+    async def _get_concatenated(
+        self,
+        segment_keys: List[str],
+        timeout: float,
+    ) -> Optional[bytes]:
+        """
+        获取并拼接多个分段的音频。
+        
+        :param segment_keys: 分段的缓存 key 列表
+        :param timeout: 总超时时间
+        :return: 拼接后的 WAV 音频数据
+        """
+        wav_parts = []
+        start_time = time.time()
+        
+        for i, seg_key in enumerate(segment_keys):
+            # 计算剩余超时时间
+            elapsed = time.time() - start_time
+            remaining_timeout = max(1, timeout - elapsed)
+            
+            audio = await self.get_by_key(seg_key, timeout=remaining_timeout)
+            if audio is None:
+                logger.warning(
+                    f"Failed to get segment {i+1}/{len(segment_keys)}: {seg_key[:16]}..."
+                )
+                return None
+            wav_parts.append(audio)
+        
+        # 拼接音频
+        try:
+            result = concatenate_wav(wav_parts)
+            logger.info(
+                f"Concatenated {len(wav_parts)} segments, "
+                f"total size: {len(result)} bytes"
+            )
+            return result
+        except Exception as e:
+            logger.error(f"Failed to concatenate audio: {e}")
+            return None
+    
     async def get_by_key(self, cache_key: str, timeout: float = 60) -> Optional[bytes]:
         """
         通过缓存 key 获取 TTS 音频。
@@ -323,8 +451,10 @@ class TTSCacheManager:
             "pending_entries": status_counts[CacheStatus.PENDING],
             "generating_entries": status_counts[CacheStatus.GENERATING],
             "failed_entries": status_counts[CacheStatus.FAILED],
+            "segment_mappings": len(self._segment_map),
             "hit_count": self.hit_count,
             "miss_count": self.miss_count,
+            "concat_hit_count": self.concat_hit_count,
             "hit_rate": hit_rate,
         }
     
@@ -332,4 +462,6 @@ class TTSCacheManager:
         """清空缓存"""
         async with self._lock:
             self._cache.clear()
+        async with self._segment_map_lock:
+            self._segment_map.clear()
         logger.info("Cache cleared")
